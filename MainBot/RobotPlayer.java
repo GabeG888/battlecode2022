@@ -78,13 +78,16 @@ public strictfp class RobotPlayer {
             List<MapLocation> leads = new ArrayList<MapLocation>();
             for (MapLocation possibleLead : possibleLeads) if (rc.senseLead(possibleLead) > 1) leads.add(possibleLead);
             if(!leads.isEmpty()) {
+                int mostLead = 0;
+                MapLocation bestLocation = leads.get(0);
                 for(MapLocation lead : leads){
-                    if(rc.senseLead(lead) > 1){
-                        navigateToLocation(rc, lead);
-                        while (rc.canMineLead(lead) && rc.senseLead(lead) > 1) rc.mineLead(lead);
+                    if(rc.senseLead(lead) > mostLead){
+                        mostLead = rc.senseLead(lead);
+                        bestLocation = lead;
                     }
-                    break;
                 }
+                navigateToLocation(rc, bestLocation);
+                while (rc.canMineLead(bestLocation) && rc.senseLead(bestLocation) > 1) rc.mineLead(bestLocation);
             }
             else explore(rc);
         }
