@@ -17,6 +17,8 @@ public strictfp class RobotPlayer {
     static int minerRounds = 100;
     static MapLocation target;
     static final double rubbleThreshold = 50;
+    static RobotType[] attackPriority = new RobotType[] {RobotType.ARCHON, RobotType.LABORATORY, RobotType.SAGE,
+            RobotType.SOLDIER, RobotType.WATCHTOWER, RobotType.MINER, RobotType.BUILDER};
 
     @SuppressWarnings("unused")
     public static void run(RobotController rc) throws GameActionException {
@@ -89,16 +91,25 @@ public strictfp class RobotPlayer {
     }
 
     static void runSoldier(RobotController rc) throws GameActionException {
+        boolean exit = false;
         int radius = rc.getType().actionRadiusSquared;
         Team opponent = rc.getTeam().opponent();
         RobotInfo[] enemies = rc.senseNearbyRobots(radius, opponent);
         if (enemies.length > 0) {
-            MapLocation toAttack = enemies[0].location;
-            if (rc.canAttack(toAttack)) {
-                rc.attack(toAttack);
+            for(RobotType type : attackPriority) {
+                for(RobotInfo enemy : enemies){
+                    if(enemy.type != type) continue;
+                    MapLocation toAttack = enemies[0].location;
+                    if (rc.canAttack(toAttack)) rc.attack(toAttack);
+                    navigateToLocation(rc, toAttack);
+                    exit = true;
+                    break;
+                }
+                if(exit) break;
             }
+
         }
-        explore(rc);
+        else explore(rc);
     }
 
     static void explore(RobotController rc) throws GameActionException {
