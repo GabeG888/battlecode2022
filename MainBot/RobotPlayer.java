@@ -43,7 +43,7 @@ public strictfp class RobotPlayer {
             }
         }
     }
-    
+
     static void runArchon(RobotController rc) throws GameActionException {
         RobotType toBuild = null;
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
@@ -66,20 +66,26 @@ public strictfp class RobotPlayer {
     }
 
     static void runMiner(RobotController rc) throws GameActionException {
-        MapLocation me = rc.getLocation();
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                MapLocation mineLocation = new MapLocation(me.x + dx, me.y + dy);
-                while (rc.canMineGold(mineLocation)) {
-                    rc.mineGold(mineLocation);
-                }
-                while (rc.canMineLead(mineLocation)) {
-                    rc.mineLead(mineLocation);
+        MapLocation[] golds = rc.senseNearbyLocationsWithGold(20);
+        if(golds.length > 0) {
+            navigateToLocation(rc, golds[0]);
+            while (rc.canMineGold(golds[0])) rc.mineGold(golds[0]);
+        }
+        else {
+            MapLocation[] possibleLeads = rc.senseNearbyLocationsWithLead(20);
+            List<MapLocation> leads = new ArrayList<MapLocation>();
+            for (MapLocation possibleLead : possibleLeads) if (rc.senseLead(possibleLead) > 1) leads.add(possibleLead);
+            if(!leads.isEmpty()) {
+                for(MapLocation lead : leads){
+                    if(rc.senseLead(lead) > 1){
+                        navigateToLocation(rc, lead);
+                        while (rc.canMineLead(lead) && rc.senseLead(lead) > 1) rc.mineLead(lead);
+                    }
+                    break;
                 }
             }
+            else explore(rc);
         }
-        if(target == null || target.equals(rc.getLocation())) target = new MapLocation(rng.nextInt(rc.getMapWidth()), rng.nextInt(rc.getMapHeight()));
-        navigateToLocation(rc, target);
     }
 
     static void runSoldier(RobotController rc) throws GameActionException {
