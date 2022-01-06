@@ -11,6 +11,12 @@ public strictfp class RobotPlayer {
 
     static int turnCount = 0;
     static Random rng;
+    static int minerCount = 0;
+    static int soldierCount = 0;
+    static int builderCount = 0;
+    static int minerRounds = 100;
+    static MapLocation target;
+    static final double rubbleThreshold = 50;
 
     @SuppressWarnings("unused")
     public static void run(RobotController rc) throws GameActionException {
@@ -37,11 +43,7 @@ public strictfp class RobotPlayer {
             }
         }
     }
-
-    static int minerCount = 0;
-    static int soldierCount = 0;
-    static int builderCount = 0;
-    static int minerRounds = 100;
+    
     static void runArchon(RobotController rc) throws GameActionException {
         RobotType toBuild = null;
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
@@ -93,7 +95,6 @@ public strictfp class RobotPlayer {
         explore(rc);
     }
 
-    static MapLocation target;
     static void explore(RobotController rc) throws GameActionException {
         if(target == null || target.equals(rc.getLocation())) target = new MapLocation(rng.nextInt(rc.getMapWidth()), rng.nextInt(rc.getMapHeight()));
         navigateToLocation(rc, target);
@@ -125,7 +126,6 @@ public strictfp class RobotPlayer {
         if(bestDirection != Direction.CENTER) rc.move(bestDirection);
     }
     
-    static final double rubbleThreshold = 50;
     static void navigateToLocationBug(RobotController rc, MapLocation target) throws GameActionException {
         Direction direction = rc.getLocation().directionTo(target);
         for (int i = 0; i < 8; ++i) {
