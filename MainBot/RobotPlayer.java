@@ -107,8 +107,10 @@ public strictfp class RobotPlayer {
                 for(RobotInfo enemy : enemies){
                     if(enemy.type != type) continue;
                     MapLocation toAttack = enemies[0].location;
-                    rc.writeSharedArray(0, toAttack.x + 1);
-                    rc.writeSharedArray(1, toAttack.y + 1);
+                    if(rc.readSharedArray(7) == 0){
+                        rc.writeSharedArray(0, toAttack.x + 1);
+                        rc.writeSharedArray(1, toAttack.y + 1);
+                    }
                     if (rc.canAttack(toAttack)) rc.attack(toAttack);
                     navigateToLocation(rc, toAttack);
                     exit = true;
