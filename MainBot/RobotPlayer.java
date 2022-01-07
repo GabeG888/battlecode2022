@@ -176,5 +176,14 @@ public strictfp class RobotPlayer {
             direction = direction.rotateRight();
         }
     }
+    
+    static MapLocation readCoordinate(RobotController rc, int index) throws GameActionException {
+        int value = rc.readSharedArray(index);
+        return(new MapLocation(value % 60, value / 60));
+    }
+
+    static void writeCoordinate(RobotController rc, int index, int xValue, int yValue, int zValue) throws GameActionException {
+        rc.writeSharedArray(index, (xValue + (yValue * 60)));
+    }
 }
 
