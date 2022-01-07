@@ -14,7 +14,8 @@ public strictfp class RobotPlayer {
     static int minerCount = 0;
     static int soldierCount = 0;
     static int builderCount = 0;
-    static int minerRounds = 100;
+    static int minerRounds = 20;
+    static int maxMinersPerArea = 10;
     static MapLocation target;
     static final double rubbleThreshold = 50;
     static RobotType[] attackPriority = new RobotType[] {RobotType.ARCHON, RobotType.LABORATORY, RobotType.SAGE,
@@ -68,28 +69,31 @@ public strictfp class RobotPlayer {
     }
 
     static void runMiner(RobotController rc) throws GameActionException {
-        MapLocation[] golds = rc.senseNearbyLocationsWithGold(20);
+        if(rc.senseNearbyRobots().length > maxMinersPerArea) explore(rc);
+        for(RobotInfo robot : rc.senseNearbyRobots()) if(robot.type == RobotType.ARCHON) explore(rc);
+        MapLocation[] golds = rc.senseNearbyLocationsWithGold(RobotType.MINER.visionRadiusSquared);
         if(golds.length > 0) {
             navigateToLocation(rc, golds[0]);
             while (rc.canMineGold(golds[0])) rc.mineGold(golds[0]);
         }
         else {
-            MapLocation[] possibleLeads = rc.senseNearbyLocationsWithLead(20);
-            List<MapLocation> leads = new ArrayList<MapLocation>();
+            MapLocation[] possibleLeads = rc.senseNearbyLocationsWithLead(2);
+            List<MapLocation> leads = new ArrayList<>();
             for (MapLocation possibleLead : possibleLeads) if (rc.senseLead(possibleLead) > 1) leads.add(possibleLead);
             if(!leads.isEmpty()) {
-                int mostLead = 0;
-                MapLocation bestLocation = leads.get(0);
-                for(MapLocation lead : leads){
-                    if(rc.senseLead(lead) > mostLead){
-                        mostLead = rc.senseLead(lead);
-                        bestLocation = lead;
-                    }
-                }
-                navigateToLocation(rc, bestLocation);
-                while (rc.canMineLead(bestLocation) && rc.senseLead(bestLocation) > 1) rc.mineLead(bestLocation);
+                MapLocation lead = leads.get(0);
+                   while (rc.canMineLead(lead) && rc.senseLead(lead) > 1){
+                       rc.mineLead(lead);
+                   }
             }
-            else explore(rc);
+            else {
+                possibleLeads = rc.senseNearbyLocationsWithLead(RobotType.MINER.visionRadiusSquared);
+                leads = new ArrayList<>();
+                for (MapLocation possibleLead : possibleLeads)
+                    if (rc.senseLead(possibleLead) > 1) leads.add(possibleLead);
+                if (!leads.isEmpty()) navigateToLocation(rc, leads.get(0));
+                else explore(rc);
+            }
         }
     }
 
@@ -122,7 +126,7 @@ public strictfp class RobotPlayer {
 
     static void navigateToLocation(RobotController rc, MapLocation end) throws GameActionException {
         float averageRubble = 0;
-        MapLocation[] locations = rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20);
+        MapLocation[] locations = rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), rc.getType().visionRadiusSquared);
         for (MapLocation location : locations) {
             averageRubble += rc.senseRubble(location);
         }
