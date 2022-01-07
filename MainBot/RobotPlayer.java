@@ -51,7 +51,7 @@ public strictfp class RobotPlayer {
         RobotType toBuild = null;
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
         else{
-            if(minerCount > soldierCount) toBuild = RobotType.SOLDIER;
+            if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
         }
         if(toBuild == null) return;
@@ -107,6 +107,8 @@ public strictfp class RobotPlayer {
                 for(RobotInfo enemy : enemies){
                     if(enemy.type != type) continue;
                     MapLocation toAttack = enemies[0].location;
+                    rc.writeSharedArray(0, toAttack.x + 1);
+                    rc.writeSharedArray(1, toAttack.y + 1);
                     if (rc.canAttack(toAttack)) rc.attack(toAttack);
                     navigateToLocation(rc, toAttack);
                     exit = true;
@@ -114,9 +116,20 @@ public strictfp class RobotPlayer {
                 }
                 if(exit) break;
             }
-
         }
-        else explore(rc);
+        else{
+            if(rc.readSharedArray(7) != 0){
+                int sharedX = rc.readSharedArray(0) - 1;
+                int sharedY = rc.readSharedArray(1) - 1;
+                MapLocation sharedLocation = new MapLocation(sharedX, sharedY);
+                if(rc.getLocation().equals(sharedLocation)){
+                    rc.writeSharedArray(0, 0);
+                    rc.writeSharedArray(1, 0);
+                }
+                navigateToLocation(rc, sharedLocation);
+            }
+            else explore(rc);
+        }
     }
 
     static void explore(RobotController rc) throws GameActionException {
