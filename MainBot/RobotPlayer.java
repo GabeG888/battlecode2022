@@ -46,7 +46,7 @@ public strictfp class RobotPlayer {
         RobotType toBuild = null;
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
         else{
-            if(minerCount * 3 > soldierCount) toBuild = RobotType.SOLDIER;
+            if(minerCount > soldierCount) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
         }
 
