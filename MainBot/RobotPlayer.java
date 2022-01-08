@@ -9,6 +9,7 @@ import java.util.Random;
 public strictfp class RobotPlayer {
 
     static Random rng;
+    static int archonIndex = 99;
     static int minerCount = 0;
     static int soldierCount = 0;
     static int builderCount = 0;
@@ -51,13 +52,18 @@ public strictfp class RobotPlayer {
     }
 
     static void runArchon(RobotController rc) throws GameActionException {
+        if(rc.readSharedArray(20) > archonIndex) archonIndex = 0;
+        else archonIndex = rc.readSharedArray(20);
+        rc.writeSharedArray(20, archonIndex + 1);
+        rc.setIndicatorString("" + rng.nextInt(rc.getArchonCount() - archonIndex));
         RobotType toBuild = null;
-
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
         else{
             if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
         }
+
+        if(rng.nextInt(rc.getArchonCount() - archonIndex) != 0) return;
 
         RobotInfo[] robots = rc.senseNearbyRobots();
         for(RobotInfo robot : robots){
@@ -88,7 +94,7 @@ public strictfp class RobotPlayer {
         for(RobotInfo robot : rc.senseNearbyRobots()) if(robot.type == RobotType.SOLDIER && !robot.getTeam().isPlayer())
             if(rc.canMove(rc.getLocation().directionTo(robot.getLocation()).opposite()))
                 rc.move(rc.getLocation().directionTo(robot.getLocation()).opposite());
-        for(RobotInfo robot : rc.senseNearbyRobots(3)) if(robot.type == RobotType.ARCHON) explore(rc);
+        //for(RobotInfo robot : rc.senseNearbyRobots(2)) if(robot.type == RobotType.ARCHON) explore(rc);
         MapLocation[] golds = rc.senseNearbyLocationsWithGold(RobotType.MINER.visionRadiusSquared);
         if(golds.length > 0) {
             navigateToLocation(rc, golds[0]);
