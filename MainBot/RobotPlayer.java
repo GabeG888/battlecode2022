@@ -1,7 +1,6 @@
 package MainBot;
 import battlecode.common.*;
 
-import javax.annotation.processing.SupportedSourceVersion;
 import java.util.*;
 import java.lang.Math;
 import java.util.Random;
@@ -9,7 +8,6 @@ import java.util.Random;
 
 public strictfp class RobotPlayer {
 
-    static int turnCount = 0;
     static Random rng;
     static int minerCount = 0;
     static int soldierCount = 0;
@@ -18,11 +16,11 @@ public strictfp class RobotPlayer {
     static int maxMinersPerArea = 10;
     static MapLocation target;
     static final double rubbleThreshold = 50;
-    static RobotType[] attackPriority = new RobotType[] {RobotType.ARCHON, RobotType.LABORATORY, RobotType.SAGE,
-            RobotType.SOLDIER, RobotType.WATCHTOWER, RobotType.MINER, RobotType.BUILDER};
+    static RobotType[] attackPriority = new RobotType[] {RobotType.ARCHON, RobotType.SAGE,
+            RobotType.SOLDIER, RobotType.WATCHTOWER, RobotType.LABORATORY, RobotType.MINER, RobotType.BUILDER};
 
     @SuppressWarnings("unused")
-    public static void run(RobotController rc) throws GameActionException {
+    public static void run(RobotController rc) {
         rng = new Random(rc.getID());
         while (true) {
             try {
@@ -35,9 +33,6 @@ public strictfp class RobotPlayer {
                     case BUILDER:
                     case SAGE:       break;
                 }
-            } catch (GameActionException e) {
-                System.out.println(rc.getType() + " Exception");
-                e.printStackTrace();
             } catch (Exception e) {
                 System.out.println(rc.getType() + " Exception");
                 e.printStackTrace();
@@ -51,15 +46,14 @@ public strictfp class RobotPlayer {
         RobotType toBuild = null;
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
         else{
-            if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
+            if(minerCount * 3 > soldierCount) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
         }
 
         RobotInfo[] robots = rc.senseNearbyRobots();
         for(RobotInfo robot : robots){
             if(robot.team != rc.getTeam()){
-                writeCoordinate(rc, 0, robot.location.x, robot.location.y);
-                writeFlag(rc, 0, true);
+                directSoldiers(rc, robot.getLocation(), 6);
                 toBuild = RobotType.SOLDIER;
                 break;
             }
@@ -109,20 +103,31 @@ public strictfp class RobotPlayer {
     }
 
     static void runSoldier(RobotController rc) throws GameActionException {
-        rc.setIndicatorString(String.valueOf(rc.readSharedArray(0)));
+        rc.setIndicatorString(soldiersDestination(rc) + " " + soldiersDirected(rc));
         boolean exit = false;
         int radius = rc.getType().actionRadiusSquared;
         Team opponent = rc.getTeam().opponent();
+        if(soldiersDirected(rc) > 0 && rc.getLocation().distanceSquaredTo(soldiersDestination(rc)) < 3)
+            cancelSoldierDirections(rc);
+
         RobotInfo[] enemies = rc.senseNearbyRobots(radius, opponent);
         if (enemies.length > 0) {
             for(RobotType type : attackPriority) {
                 for(RobotInfo enemy : enemies){
                     if(enemy.type != type) continue;
                     MapLocation toAttack = enemies[0].location;
-                    if(!readFlag(rc, 0)){
-                        writeCoordinate(rc, 0, toAttack.x, toAttack.y);
-                        writeFlag(rc, 0, true);
+                    int priority;
+                    switch (type){
+                        case BUILDER:
+                        case MINER: priority = 2; break;
+                        case SOLDIER:
+                        case SAGE: priority = 3; break;
+                        case WATCHTOWER:
+                        case LABORATORY: priority = 4; break;
+                        case ARCHON: priority = 5; break;
+                        default: priority = 0; break;
                     }
+                    directSoldiers(rc, toAttack, priority);
                     if (rc.canAttack(toAttack)) rc.attack(toAttack);
                     navigateToLocation(rc, toAttack);
                     exit = true;
@@ -131,15 +136,10 @@ public strictfp class RobotPlayer {
                 if(exit) break;
             }
         }
-        else{
-            if(readFlag(rc, 0)){
-                MapLocation sharedLocation = readCoordinate(rc, 0);
-                if(rc.getLocation().equals(sharedLocation)){
-                    writeFlag(rc, 0, false);
-                }
-                navigateToLocation(rc, sharedLocation);
-            }
-            else explore(rc);
+        else if(soldiersDirected(rc) > 0) navigateToLocation(rc, soldiersDestination(rc));
+        else {
+            explore(rc);
+            directSoldiers(rc, target, 1);
         }
     }
 
@@ -178,11 +178,32 @@ public strictfp class RobotPlayer {
         for (int i = 0; i < 8; ++i) {
             if (rc.canMove(direction) && rc.senseRubble(rc.getLocation().add(direction)) <= rubbleThreshold) {
                 rc.move(direction);
-                direction = direction.rotateLeft();
                 break;
             }
             direction = direction.rotateRight();
         }
+    }
+
+    static MapLocation soldiersDestination(RobotController rc) throws GameActionException{
+        if(soldiersDirected(rc) > 0) return readCoordinate(rc, 0);
+        else return null;
+    }
+
+    static int soldiersDirected(RobotController rc) throws GameActionException{
+        return rc.readSharedArray(1);
+    }
+
+    static boolean directSoldiers(RobotController rc, MapLocation location, int priority) throws GameActionException{
+        if(rc.readSharedArray(1) >= priority) return false;
+        else{
+            rc.writeSharedArray(1, priority);
+            writeCoordinate(rc, 0, location.x, location.y);
+            return true;
+        }
+    }
+
+    static void cancelSoldierDirections(RobotController rc) throws GameActionException  {
+        rc.writeSharedArray(1, 0);
     }
 
     static MapLocation readCoordinate(RobotController rc, int index) throws GameActionException {
