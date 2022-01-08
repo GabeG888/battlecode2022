@@ -12,7 +12,7 @@ public strictfp class RobotPlayer {
     static int minerCount = 0;
     static int soldierCount = 0;
     static int builderCount = 0;
-    static int minerRounds = 20;
+    static int minerRounds = 25;
     static int maxMinersPerArea = 10;
     static MapLocation target;
     static final double rubbleThreshold = 50;
@@ -36,9 +36,9 @@ public strictfp class RobotPlayer {
                     case ARCHON:     runArchon(rc);  break;
                     case MINER:      runMiner(rc);   break;
                     case SOLDIER:    runSoldier(rc); break;
-                    case LABORATORY:
-                    case WATCHTOWER:
-                    case BUILDER:
+                    case LABORATORY: break;
+                    case WATCHTOWER: break;
+                    case BUILDER: runBuilder(rc); break;
                     case SAGE:       break;
                 }
             } catch (Exception e) {
@@ -52,9 +52,10 @@ public strictfp class RobotPlayer {
 
     static void runArchon(RobotController rc) throws GameActionException {
         RobotType toBuild = null;
+
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
         else{
-            if(minerCount * 2> soldierCount) toBuild = RobotType.SOLDIER;
+            if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
         }
 
@@ -84,7 +85,10 @@ public strictfp class RobotPlayer {
     static void runMiner(RobotController rc) throws GameActionException {
         CheckForEnemies(rc);
         if(rc.senseNearbyRobots().length > maxMinersPerArea) explore(rc);
-        for(RobotInfo robot : rc.senseNearbyRobots()) if(robot.type == RobotType.ARCHON) explore(rc);
+        for(RobotInfo robot : rc.senseNearbyRobots()) if(robot.type == RobotType.SOLDIER && !robot.getTeam().isPlayer())
+            if(rc.canMove(rc.getLocation().directionTo(robot.getLocation()).opposite()))
+                rc.move(rc.getLocation().directionTo(robot.getLocation()).opposite());
+        for(RobotInfo robot : rc.senseNearbyRobots(3)) if(robot.type == RobotType.ARCHON) explore(rc);
         MapLocation[] golds = rc.senseNearbyLocationsWithGold(RobotType.MINER.visionRadiusSquared);
         if(golds.length > 0) {
             navigateToLocation(rc, golds[0]);
@@ -96,17 +100,19 @@ public strictfp class RobotPlayer {
             for (MapLocation possibleLead : possibleLeads) if (rc.senseLead(possibleLead) > 1) leads.add(possibleLead);
             if(!leads.isEmpty()) {
                 MapLocation lead = leads.get(0);
-                while (rc.canMineLead(lead) && rc.senseLead(lead) > 1){
-                    rc.mineLead(lead);
-                }
+                while (rc.canMineLead(lead) && rc.senseLead(lead) > 1) rc.mineLead(lead);
             }
             else {
                 possibleLeads = rc.senseNearbyLocationsWithLead(RobotType.MINER.visionRadiusSquared);
                 leads = new ArrayList<>();
                 for (MapLocation possibleLead : possibleLeads)
                     if (rc.senseLead(possibleLead) > 1) leads.add(possibleLead);
-                if (!leads.isEmpty()) navigateToLocation(rc, leads.get(0));
-                else explore(rc);
+                if (!leads.isEmpty()) {
+                    navigateToLocation(rc, leads.get(rng.nextInt(leads.size())));
+                }
+                else {
+                    explore(rc);
+                }
             }
         }
     }
@@ -127,17 +133,38 @@ public strictfp class RobotPlayer {
                     MapLocation toAttack = enemy.location;
                     directSoldiers(rc, toAttack, priorityMap.get(type));
                     if (rc.canAttack(toAttack)) rc.attack(toAttack);
-                    navigateToLocation(rc, toAttack);
                     exit = true;
                     break;
                 }
                 if(exit) break;
             }
         }
-        else if(soldiersDirected(rc) > 0) navigateToLocation(rc, soldiersDestination(rc));
+        if(soldiersDirected(rc) > 0) navigateToLocation(rc, soldiersDestination(rc));
         else {
             explore(rc);
             directSoldiers(rc, target, 1);
+        }
+    }
+
+    static void runBuilder(RobotController rc) throws GameActionException{
+        startLeadFarm(rc);
+    }
+
+    static void startLeadFarm(RobotController rc) throws GameActionException{ ;
+        if(rc.senseLead(rc.getLocation()) == 0) rc.disintegrate();
+        int bestDistance = 10000;
+        MapLocation bestLocation = null;
+        for(MapLocation location : rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20)){
+            if(rc.senseLead(location) == 0 && rc.getLocation().distanceSquaredTo(location) < bestDistance
+            && rc.senseRobotAtLocation(location) != null){
+                bestDistance = rc.getLocation().distanceSquaredTo(location);
+                bestLocation = location;
+            }
+        };
+        if(bestLocation == null) explore(rc);
+        else {
+            navigateToLocation(rc, bestLocation);
+            rc.setIndicatorString(bestLocation.x + " " + bestLocation.y);
         }
     }
 
@@ -168,7 +195,7 @@ public strictfp class RobotPlayer {
                 bestDirection = direction;
             }
         }
-        if(bestDirection != Direction.CENTER) rc.move(bestDirection);
+        if(bestDirection != Direction.CENTER && rc.canMove(bestDirection)) rc.move(bestDirection);
     }
 
     static void navigateToLocationBug(RobotController rc, MapLocation target) throws GameActionException {
