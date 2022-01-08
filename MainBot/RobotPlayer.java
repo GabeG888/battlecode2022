@@ -18,9 +18,17 @@ public strictfp class RobotPlayer {
     static final double rubbleThreshold = 50;
     static RobotType[] attackPriority = new RobotType[] {RobotType.ARCHON, RobotType.SAGE,
             RobotType.SOLDIER, RobotType.WATCHTOWER, RobotType.LABORATORY, RobotType.MINER, RobotType.BUILDER};
+    static HashMap<RobotType, Integer> priorityMap = new HashMap<RobotType, Integer>();
 
     @SuppressWarnings("unused")
     public static void run(RobotController rc) {
+        priorityMap.put(RobotType.BUILDER, 2);
+        priorityMap.put(RobotType.MINER, 2);
+        priorityMap.put(RobotType.SOLDIER, 3);
+        priorityMap.put(RobotType.SAGE, 3);
+        priorityMap.put(RobotType.WATCHTOWER, 4);
+        priorityMap.put(RobotType.LABORATORY, 4);
+        priorityMap.put(RobotType.ARCHON, 5);
         rng = new Random(rc.getID());
         while (true) {
             try {
@@ -74,6 +82,7 @@ public strictfp class RobotPlayer {
     }
 
     static void runMiner(RobotController rc) throws GameActionException {
+        CheckForEnemies(rc);
         if(rc.senseNearbyRobots().length > maxMinersPerArea) explore(rc);
         for(RobotInfo robot : rc.senseNearbyRobots()) if(robot.type == RobotType.ARCHON) explore(rc);
         MapLocation[] golds = rc.senseNearbyLocationsWithGold(RobotType.MINER.visionRadiusSquared);
@@ -115,19 +124,8 @@ public strictfp class RobotPlayer {
             for(RobotType type : attackPriority) {
                 for(RobotInfo enemy : enemies){
                     if(enemy.type != type) continue;
-                    MapLocation toAttack = enemies[0].location;
-                    int priority;
-                    switch (type){
-                        case BUILDER:
-                        case MINER: priority = 2; break;
-                        case SOLDIER:
-                        case SAGE: priority = 3; break;
-                        case WATCHTOWER:
-                        case LABORATORY: priority = 4; break;
-                        case ARCHON: priority = 5; break;
-                        default: priority = 0; break;
-                    }
-                    directSoldiers(rc, toAttack, priority);
+                    MapLocation toAttack = enemy.location;
+                    directSoldiers(rc, toAttack, priorityMap.get(type));
                     if (rc.canAttack(toAttack)) rc.attack(toAttack);
                     navigateToLocation(rc, toAttack);
                     exit = true;
@@ -184,6 +182,11 @@ public strictfp class RobotPlayer {
         }
     }
 
+    static void CheckForEnemies(RobotController rc) throws GameActionException{
+        for(RobotInfo enemy : rc.senseNearbyRobots(RobotType.MINER.visionRadiusSquared, rc.getTeam().opponent()))
+            directSoldiers(rc, enemy.location, priorityMap.get(enemy.type));
+    }
+
     static MapLocation soldiersDestination(RobotController rc) throws GameActionException{
         if(soldiersDirected(rc) > 0) return readCoordinate(rc, 0);
         else return null;
@@ -226,4 +229,3 @@ public strictfp class RobotPlayer {
         rc.writeSharedArray(index, (value ? 1 : 0) * 4096 + coordinate);
     }
 }
-
