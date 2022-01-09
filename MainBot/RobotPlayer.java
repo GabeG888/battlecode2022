@@ -23,9 +23,6 @@ public strictfp class RobotPlayer {
 
     @SuppressWarnings("unused")
     public static void run(RobotController rc) throws GameActionException {
-        if(rc.readSharedArray(2) > turnIndex) turnIndex = 0;
-        else turnIndex = rc.readSharedArray(2);
-        rc.writeSharedArray(2, turnIndex + 1);
         priorityMap.put(RobotType.BUILDER, 2);
         priorityMap.put(RobotType.MINER, 2);
         priorityMap.put(RobotType.SOLDIER, 3);
@@ -55,6 +52,9 @@ public strictfp class RobotPlayer {
     }
 
     static void runArchon(RobotController rc) throws GameActionException {
+        if(rc.readSharedArray(2) > turnIndex) turnIndex = 0;
+        else turnIndex = rc.readSharedArray(2);
+        rc.writeSharedArray(2, turnIndex + 1);
         RobotType toBuild = null;
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
         else{
@@ -228,17 +228,10 @@ public strictfp class RobotPlayer {
                 bestDirection = direction;
             }
         }
-        if(bestDirection != Direction.CENTER && rc.canMove(bestDirection)) rc.move(bestDirection);
-    }
-
-    static void navigateToLocationBug(RobotController rc, MapLocation target) throws GameActionException {
-        Direction direction = rc.getLocation().directionTo(target);
-        for (int i = 0; i < 8; ++i) {
-            if (rc.canMove(direction) && rc.senseRubble(rc.getLocation().add(direction)) <= rubbleThreshold) {
-                rc.move(direction);
-                break;
-            }
-            direction = direction.rotateRight();
+        if(bestDirection != Direction.CENTER){
+            if(rc.canMove(bestDirection)) rc.move(bestDirection);
+            else if(rc.canMove(bestDirection.rotateLeft())) rc.move(bestDirection.rotateLeft());
+            else if(rc.canMove(bestDirection.rotateRight())) rc.move(bestDirection.rotateRight());
         }
     }
 
