@@ -17,8 +17,8 @@ public strictfp class RobotPlayer {
     static int maxMinersPerArea = 10;
     static MapLocation target;
     static final double rubbleThreshold = 50;
-    static RobotType[] attackPriority = new RobotType[] {RobotType.ARCHON, RobotType.SAGE,
-            RobotType.SOLDIER, RobotType.WATCHTOWER, RobotType.LABORATORY, RobotType.MINER, RobotType.BUILDER};
+    static RobotType[] attackPriority = new RobotType[] {RobotType.SAGE, RobotType.WATCHTOWER,
+            RobotType.SOLDIER, RobotType.ARCHON, RobotType.LABORATORY, RobotType.MINER, RobotType.BUILDER};
     static HashMap<RobotType, Integer> priorityMap = new HashMap<RobotType, Integer>();
 
     @SuppressWarnings("unused")
@@ -94,7 +94,6 @@ public strictfp class RobotPlayer {
         for(RobotInfo robot : rc.senseNearbyRobots()) if(robot.type == RobotType.SOLDIER && !robot.getTeam().isPlayer())
             if(rc.canMove(rc.getLocation().directionTo(robot.getLocation()).opposite()))
                 rc.move(rc.getLocation().directionTo(robot.getLocation()).opposite());
-        //for(RobotInfo robot : rc.senseNearbyRobots(2)) if(robot.type == RobotType.ARCHON) explore(rc);
         MapLocation[] golds = rc.senseNearbyLocationsWithGold(RobotType.MINER.visionRadiusSquared);
         if(golds.length > 0) {
             navigateToLocation(rc, golds[0]);
@@ -112,13 +111,20 @@ public strictfp class RobotPlayer {
                 possibleLeads = rc.senseNearbyLocationsWithLead(RobotType.MINER.visionRadiusSquared);
                 leads = new ArrayList<>();
                 for (MapLocation possibleLead : possibleLeads)
-                    if (rc.senseLead(possibleLead) > 1) leads.add(possibleLead);
-                if (!leads.isEmpty()) {
-                    navigateToLocation(rc, leads.get(rng.nextInt(leads.size())));
+                    if (rc.senseLead(possibleLead) > 1) {
+                        boolean isTaken = false;
+                        for(Direction direction : Direction.values()) {
+                            if(possibleLead.add(direction).distanceSquaredTo(rc.getLocation()) > 20) continue;
+                            RobotInfo robot = rc.senseRobotAtLocation(possibleLead.add(direction));
+                            if(robot != null && robot.getTeam().isPlayer() && robot.type.equals(RobotType.MINER)){
+                                isTaken = true;
+                                break;
+                            }
+                        }
+                        if(!isTaken) leads.add(possibleLead);
                 }
-                else {
-                    explore(rc);
-                }
+                if (!leads.isEmpty()) navigateToLocation(rc, leads.get(rng.nextInt(leads.size())));
+                else explore(rc);
             }
         }
     }
