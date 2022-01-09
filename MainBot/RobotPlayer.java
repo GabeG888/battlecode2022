@@ -142,7 +142,8 @@ public strictfp class RobotPlayer {
                 else {
                     explore(rc);
                     for(Direction direction : Direction.values())
-                        if(rc.canMineLead(rc.getLocation().add(direction)))
+                        if(rc.canMineLead(rc.getLocation().add(direction))
+                                && rc.senseLead(rc.getLocation().add(direction)) > 1)
                             rc.mineLead(rc.getLocation().add(direction));
                 }
             }
