@@ -9,7 +9,7 @@ import java.util.Random;
 public strictfp class RobotPlayer {
 
     static Random rng;
-    static int archonIndex = 99;
+    static int turnIndex = 99;
     static int minerCount = 0;
     static int soldierCount = 0;
     static int builderCount = 0;
@@ -22,7 +22,10 @@ public strictfp class RobotPlayer {
     static HashMap<RobotType, Integer> priorityMap = new HashMap<RobotType, Integer>();
 
     @SuppressWarnings("unused")
-    public static void run(RobotController rc) {
+    public static void run(RobotController rc) throws GameActionException {
+        if(rc.readSharedArray(2) > turnIndex) turnIndex = 0;
+        else turnIndex = rc.readSharedArray(2);
+        rc.writeSharedArray(2, turnIndex + 1);
         priorityMap.put(RobotType.BUILDER, 2);
         priorityMap.put(RobotType.MINER, 2);
         priorityMap.put(RobotType.SOLDIER, 3);
@@ -52,10 +55,6 @@ public strictfp class RobotPlayer {
     }
 
     static void runArchon(RobotController rc) throws GameActionException {
-        if(rc.readSharedArray(20) > archonIndex) archonIndex = 0;
-        else archonIndex = rc.readSharedArray(20);
-        rc.writeSharedArray(20, archonIndex + 1);
-        rc.setIndicatorString("" + rng.nextInt(rc.getArchonCount() - archonIndex));
         RobotType toBuild = null;
         if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
         else{
@@ -63,7 +62,7 @@ public strictfp class RobotPlayer {
             else toBuild = RobotType.MINER;
         }
 
-        if(rng.nextInt(rc.getArchonCount() - archonIndex) != 0) return;
+        if(rng.nextInt(rc.getArchonCount() - turnIndex) != 0) return;
 
         RobotInfo[] robots = rc.senseNearbyRobots();
         for(RobotInfo robot : robots){
@@ -102,7 +101,21 @@ public strictfp class RobotPlayer {
         else {
             MapLocation[] possibleLeads = rc.senseNearbyLocationsWithLead(2);
             List<MapLocation> leads = new ArrayList<>();
-            for (MapLocation possibleLead : possibleLeads) if (rc.senseLead(possibleLead) > 1) leads.add(possibleLead);
+            for (MapLocation possibleLead : possibleLeads)
+                if (rc.senseLead(possibleLead) > 1) {
+                    boolean isTaken = false;
+                    for(Direction direction : Direction.values()) {
+                        if(possibleLead.add(direction).distanceSquaredTo(rc.getLocation()) > 20) continue;
+                        if(!rc.onTheMap(possibleLead.add(direction))) continue;
+                        RobotInfo robot = rc.senseRobotAtLocation(possibleLead.add(direction));
+                        if(robot != null && robot.getTeam().isPlayer() && robot.type.equals(RobotType.MINER)
+                        && robot.getID() > rc.getID()){
+                            isTaken = true;
+                            break;
+                        }
+                    }
+                    if(!isTaken) leads.add(possibleLead);
+                }
             if(!leads.isEmpty()) {
                 MapLocation lead = leads.get(0);
                 while (rc.canMineLead(lead) && rc.senseLead(lead) > 1) rc.mineLead(lead);
@@ -115,16 +128,23 @@ public strictfp class RobotPlayer {
                         boolean isTaken = false;
                         for(Direction direction : Direction.values()) {
                             if(possibleLead.add(direction).distanceSquaredTo(rc.getLocation()) > 20) continue;
+                            if(!rc.onTheMap(possibleLead.add(direction))) continue;
                             RobotInfo robot = rc.senseRobotAtLocation(possibleLead.add(direction));
-                            if(robot != null && robot.getTeam().isPlayer() && robot.type.equals(RobotType.MINER)){
+                            if(robot != null && robot.getTeam().isPlayer() && robot.type.equals(RobotType.MINER)
+                                    && robot.getID() > rc.getID()){
                                 isTaken = true;
                                 break;
                             }
                         }
                         if(!isTaken) leads.add(possibleLead);
-                }
+                    }
                 if (!leads.isEmpty()) navigateToLocation(rc, leads.get(rng.nextInt(leads.size())));
-                else explore(rc);
+                else {
+                    explore(rc);
+                    for(Direction direction : Direction.values())
+                        if(rc.canMineLead(rc.getLocation().add(direction)))
+                            rc.mineLead(rc.getLocation().add(direction));
+                }
             }
         }
     }
