@@ -58,13 +58,13 @@ public strictfp class RobotPlayer {
         else turnIndex = rc.readSharedArray(2);
         rc.writeSharedArray(2, turnIndex + 1);
         RobotType toBuild = null;
-        if(rc.getRoundNum() <= minerRounds) toBuild = RobotType.MINER;
+        if(soldiersDestination(rc) == null) toBuild = RobotType.MINER;
         else{
             if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
         }
 
-        if(rng.nextInt(rc.getArchonCount() - turnIndex) != 0) return;
+        if(rc.getTeamLeadAmount(rc.getTeam()) < 100 && rng.nextInt(rc.getArchonCount() - turnIndex) != 0) return;
 
         RobotInfo[] robots = rc.senseNearbyRobots();
         for(RobotInfo robot : robots){
