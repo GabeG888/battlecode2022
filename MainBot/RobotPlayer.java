@@ -1,8 +1,10 @@
 package MainBot;
 import battlecode.common.*;
 
+import java.awt.*;
 import java.util.*;
 import java.lang.Math;
+import java.util.List;
 import java.util.Random;
 
 
@@ -109,7 +111,7 @@ public strictfp class RobotPlayer {
                         if(!rc.onTheMap(possibleLead.add(direction))) continue;
                         RobotInfo robot = rc.senseRobotAtLocation(possibleLead.add(direction));
                         if(robot != null && robot.getTeam().isPlayer() && robot.type.equals(RobotType.MINER)
-                        && robot.getID() > rc.getID()){
+                                && robot.getID() > rc.getID()){
                             isTaken = true;
                             break;
                         }
@@ -171,6 +173,22 @@ public strictfp class RobotPlayer {
                 }
                 if(exit) break;
             }
+            RobotInfo closestEnemy = null;
+            int closestDistance = 10000;
+            for(RobotInfo enemy : enemies){
+                if(rc.getLocation().distanceSquaredTo(enemy.getLocation()) < closestDistance){
+                    closestDistance = rc.getLocation().distanceSquaredTo(enemy.getLocation());
+                    closestEnemy = enemy;
+                }
+            }
+            if(closestEnemy == null) return;
+            if(closestEnemy.type.equals(RobotType.SOLDIER)){
+                if(rc.getLocation().distanceSquaredTo(closestEnemy.getLocation()) > 13)
+                    navigateToLocation(rc, closestEnemy.getLocation());
+                else if(rc.getLocation().distanceSquaredTo(closestEnemy.getLocation()) < 13)
+                    navigateToLocation(rc, rc.getLocation().translate(rc.getLocation().x, rc.getLocation().y)
+                            .translate(-closestEnemy.location.x, -closestEnemy.location.y));
+            }
         }
         if(soldiersDirected(rc) > 0) navigateToLocation(rc, soldiersDestination(rc));
         else {
@@ -189,7 +207,7 @@ public strictfp class RobotPlayer {
         MapLocation bestLocation = null;
         for(MapLocation location : rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20)){
             if(rc.senseLead(location) == 0 && rc.getLocation().distanceSquaredTo(location) < bestDistance
-            && rc.senseRobotAtLocation(location) != null){
+                    && rc.senseRobotAtLocation(location) != null){
                 bestDistance = rc.getLocation().distanceSquaredTo(location);
                 bestLocation = location;
             }
