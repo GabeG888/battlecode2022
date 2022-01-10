@@ -15,13 +15,11 @@ public strictfp class RobotPlayer {
     static int minerCount = 0;
     static int soldierCount = 0;
     static int builderCount = 0;
-    static int minerRounds = 25;
     static int maxMinersPerArea = 10;
     static MapLocation target;
-    static final double rubbleThreshold = 50;
     static RobotType[] attackPriority = new RobotType[] {RobotType.SAGE, RobotType.WATCHTOWER,
             RobotType.SOLDIER, RobotType.ARCHON, RobotType.LABORATORY, RobotType.MINER, RobotType.BUILDER};
-    static HashMap<RobotType, Integer> priorityMap = new HashMap<RobotType, Integer>();
+    static HashMap<RobotType, Integer> priorityMap = new HashMap<>();
 
     @SuppressWarnings("unused")
     public static void run(RobotController rc) throws GameActionException {
@@ -40,7 +38,7 @@ public strictfp class RobotPlayer {
                     case MINER:      runMiner(rc);   break;
                     case SOLDIER:    runSoldier(rc); break;
                     case LABORATORY: break;
-                    case WATCHTOWER: break;
+                    case WATCHTOWER: runWatchtower(rc); break;
                     case BUILDER: runBuilder(rc); break;
                     case SAGE:       break;
                 }
@@ -74,6 +72,10 @@ public strictfp class RobotPlayer {
                 break;
             }
         }
+
+        if(rc.getTeamLeadAmount(rc.getTeam()) > 2000 && builderCount < 10
+                && toBuild == RobotType.SOLDIER && rng.nextBoolean())
+            toBuild = RobotType.BUILDER;
 
         if(toBuild == null) return;
         for(Direction direction : Direction.values()) {
@@ -198,10 +200,57 @@ public strictfp class RobotPlayer {
     }
 
     static void runBuilder(RobotController rc) throws GameActionException{
-        startLeadFarm(rc);
+        BuildWatchtowers(rc);
     }
 
-    static void startLeadFarm(RobotController rc) throws GameActionException{ ;
+    static void runWatchtower(RobotController rc) throws GameActionException{
+        RobotInfo[] enemies = rc.senseNearbyRobots(RobotType.WATCHTOWER.visionRadiusSquared, rc.getTeam());
+        RobotInfo closestEnemy = null;
+        int closestDistance = 10000;
+        for(RobotInfo enemy : enemies){
+            if(rc.getLocation().distanceSquaredTo(enemy.getLocation()) < closestDistance){
+                closestDistance = rc.getLocation().distanceSquaredTo(enemy.getLocation());
+                closestEnemy = enemy;
+            }
+        }
+        if(closestEnemy != null && rc.canAttack(closestEnemy.getLocation())) rc.attack(closestEnemy.getLocation());
+    }
+
+    static void BuildWatchtowers(RobotController rc) throws GameActionException{
+        MapLocation[] locations = rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20);
+        MapLocation bestPrototype = null;
+        int bestDistance = 10000;
+        for(MapLocation location : locations){
+            RobotInfo robot = rc.senseRobotAtLocation(location);
+            if(robot != null && robot.mode == RobotMode.PROTOTYPE && rc.onTheMap(location)
+                    && rc.getLocation().distanceSquaredTo(robot.getLocation()) < bestDistance){
+                bestDistance = rc.getLocation().distanceSquaredTo(robot.getLocation());
+                bestPrototype = robot.getLocation();
+            }
+        }
+        if(bestPrototype != null){
+            if(rc.canRepair(bestPrototype)) rc.repair(bestPrototype);
+            else navigateToLocation(rc, bestPrototype);
+        }
+        else{
+            MapLocation bestLocation = null;
+            bestDistance = 10000;
+            for(MapLocation location : locations){
+                if(location.x % 2 == 0 && location.y % 2 == 0 && rc.senseRobotAtLocation(location) == null
+                        && rc.getLocation().distanceSquaredTo(location) < bestDistance){
+                    bestDistance = rc.getLocation().distanceSquaredTo(location);
+                    bestLocation = location;
+                }
+            }
+            if(bestLocation == null) return;
+            if(!rc.getLocation().add(rc.getLocation().directionTo(bestLocation)).equals(bestLocation))
+                navigateToLocation(rc, bestLocation);
+            else if(rc.getTeamLeadAmount(rc.getTeam() ) > 2000)
+                rc.buildRobot(RobotType.WATCHTOWER, rc.getLocation().directionTo(bestLocation));
+        }
+    }
+
+    static void StartLeadFarm(RobotController rc) throws GameActionException{
         if(rc.senseLead(rc.getLocation()) == 0) rc.disintegrate();
         int bestDistance = 10000;
         MapLocation bestLocation = null;
