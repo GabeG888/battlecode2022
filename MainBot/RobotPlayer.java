@@ -204,16 +204,25 @@ public strictfp class RobotPlayer {
     }
 
     static void runWatchtower(RobotController rc) throws GameActionException{
-        RobotInfo[] enemies = rc.senseNearbyRobots(RobotType.WATCHTOWER.visionRadiusSquared, rc.getTeam());
-        RobotInfo closestEnemy = null;
-        int closestDistance = 10000;
-        for(RobotInfo enemy : enemies){
-            if(rc.getLocation().distanceSquaredTo(enemy.getLocation()) < closestDistance){
-                closestDistance = rc.getLocation().distanceSquaredTo(enemy.getLocation());
-                closestEnemy = enemy;
+        if(rc.getMode() == RobotMode.TURRET){
+            RobotInfo[] enemies = rc.senseNearbyRobots(RobotType.WATCHTOWER.actionRadiusSquared, rc.getTeam().opponent());
+            RobotInfo closestEnemy = null;
+            int closestDistance = 10000;
+            for(RobotInfo enemy : enemies){
+                if(rc.getLocation().distanceSquaredTo(enemy.getLocation()) < closestDistance){
+                    closestDistance = rc.getLocation().distanceSquaredTo(enemy.getLocation());
+                    closestEnemy = enemy;
+                }
             }
+            if(closestEnemy != null && rc.canAttack(closestEnemy.getLocation())) rc.attack(closestEnemy.getLocation());
+            if(closestEnemy == null && rc.canTransform())  rc.transform();
         }
-        if(closestEnemy != null && rc.canAttack(closestEnemy.getLocation())) rc.attack(closestEnemy.getLocation());
+        else if(rc.getMode() == RobotMode.PORTABLE){
+            if(rc.senseNearbyRobots(RobotType.WATCHTOWER.actionRadiusSquared, rc.getTeam().opponent()).length > 0
+                    && rc.canTransform())
+                rc.transform();
+            else explore(rc);
+        }
     }
 
     static void BuildWatchtowers(RobotController rc) throws GameActionException{
@@ -245,7 +254,8 @@ public strictfp class RobotPlayer {
             if(bestLocation == null) return;
             if(!rc.getLocation().add(rc.getLocation().directionTo(bestLocation)).equals(bestLocation))
                 navigateToLocation(rc, bestLocation);
-            else if(rc.getTeamLeadAmount(rc.getTeam() ) > 2000)
+            else if(rc.getTeamLeadAmount(rc.getTeam()) > 2000
+                    && rc.canBuildRobot(RobotType.WATCHTOWER, rc.getLocation().directionTo(bestLocation)))
                 rc.buildRobot(RobotType.WATCHTOWER, rc.getLocation().directionTo(bestLocation));
         }
     }
