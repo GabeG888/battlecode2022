@@ -56,7 +56,10 @@ public strictfp class RobotPlayer {
         else turnIndex = rc.readSharedArray(2);
         rc.writeSharedArray(2, turnIndex + 1);
         RobotType toBuild = null;
-        if(soldiersDestination(rc) == null) toBuild = RobotType.MINER;
+        if(soldiersDestination(rc) == null) {
+            if(minerCount > soldierCount * 3) toBuild = RobotType.SOLDIER;
+            else toBuild = RobotType.MINER;
+        }
         else{
             if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
