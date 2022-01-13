@@ -1,6 +1,7 @@
 package MainBot;
 import battlecode.common.*;
 
+
 import java.awt.*;
 import java.util.*;
 import java.lang.Math;
@@ -20,6 +21,9 @@ public strictfp class RobotPlayer {
     static RobotType[] attackPriority = new RobotType[] {RobotType.SAGE, RobotType.WATCHTOWER,
             RobotType.SOLDIER, RobotType.ARCHON, RobotType.LABORATORY, RobotType.MINER, RobotType.BUILDER};
     static HashMap<RobotType, Integer> priorityMap = new HashMap<>();
+    static int turnOrderIndex = 0;
+    static int soldierIndexStart = 1;
+    static int soldierIndexEnd = 63;
 
     @SuppressWarnings("unused")
     public static void run(RobotController rc) throws GameActionException {
@@ -52,11 +56,11 @@ public strictfp class RobotPlayer {
     }
 
     static void runArchon(RobotController rc) throws GameActionException {
-        if(rc.readSharedArray(2) > turnIndex) turnIndex = 0;
-        else turnIndex = rc.readSharedArray(2);
-        rc.writeSharedArray(2, turnIndex + 1);
+        if(rc.readSharedArray(turnOrderIndex) > turnIndex) turnIndex = 0;
+        else turnIndex = rc.readSharedArray(turnOrderIndex);
+        rc.writeSharedArray(turnOrderIndex, turnIndex + 1);
         RobotType toBuild = null;
-        if(soldiersDestination(rc) == null) {
+        if(false) {
             if(minerCount > soldierCount * 3) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
         }
@@ -70,7 +74,6 @@ public strictfp class RobotPlayer {
         RobotInfo[] robots = rc.senseNearbyRobots();
         for(RobotInfo robot : robots){
             if(robot.team != rc.getTeam()){
-                directSoldiers(rc, robot.getLocation(), 6);
                 toBuild = RobotType.SOLDIER;
                 break;
             }
@@ -95,7 +98,6 @@ public strictfp class RobotPlayer {
     }
 
     static void runMiner(RobotController rc) throws GameActionException {
-        CheckForEnemies(rc);
         if(rc.senseNearbyRobots().length > maxMinersPerArea) explore(rc);
         for(RobotInfo robot : rc.senseNearbyRobots()) if(robot.type == RobotType.SOLDIER && !robot.getTeam().isPlayer())
             if(rc.canMove(rc.getLocation().directionTo(robot.getLocation()).opposite()))
@@ -158,25 +160,24 @@ public strictfp class RobotPlayer {
     }
 
     static void runSoldier(RobotController rc) throws GameActionException {
-        rc.setIndicatorString(soldiersDestination(rc) + " " + soldiersDirected(rc));
         boolean exit = false;
         int radius = rc.getType().actionRadiusSquared;
         Team opponent = rc.getTeam().opponent();
-        if(soldiersDirected(rc) > 0 && rc.getLocation().distanceSquaredTo(soldiersDestination(rc)) < 3)
-            cancelSoldierDirections(rc);
 
         RobotInfo[] enemies = rc.senseNearbyRobots(radius, opponent);
         if (enemies.length > 0) {
-            for(RobotType type : attackPriority) {
-                for(RobotInfo enemy : enemies){
-                    if(enemy.type != type) continue;
+            AddSoldierDestination(rc, enemies[0].location);
+            for (RobotType type : attackPriority) {
+                for (RobotInfo enemy : enemies) {
+                    if (enemy.type != type) continue;
                     MapLocation toAttack = enemy.location;
-                    directSoldiers(rc, toAttack, priorityMap.get(type));
-                    if (rc.canAttack(toAttack)) rc.attack(toAttack);
-                    exit = true;
-                    break;
+                    if (rc.canAttack(toAttack)) {
+                        rc.attack(toAttack);
+                        exit = true;
+                        break;
+                    }
                 }
-                if(exit) break;
+                if (exit) break;
             }
             RobotInfo closestEnemy = null;
             int closestDistance = 10000;
@@ -195,10 +196,21 @@ public strictfp class RobotPlayer {
                             .translate(-closestEnemy.location.x, -closestEnemy.location.y));
             }
         }
-        if(soldiersDirected(rc) > 0) navigateToLocation(rc, soldiersDestination(rc));
-        else {
-            explore(rc);
-            directSoldiers(rc, target, 1);
+        else{
+            MapLocation[] enemyLocations = GetAllSoldierDestinations(rc);
+            MapLocation closestEnemy = null;
+            int closestDistance = 10000;
+            for(MapLocation enemyLocation : enemyLocations){
+                if(rc.getLocation().distanceSquaredTo(enemyLocation) < closestDistance){
+                    closestDistance = rc.getLocation().distanceSquaredTo(enemyLocation);
+                    closestEnemy = enemyLocation;
+                }
+            }
+            if(closestEnemy != null) {
+                if(closestEnemy.distanceSquaredTo(rc.getLocation()) < 10) RemoveSoldierDestination(rc, closestEnemy);
+                navigateToLocation(rc, closestEnemy);
+            }
+            else explore(rc);
         }
     }
 
@@ -315,50 +327,34 @@ public strictfp class RobotPlayer {
         }
     }
 
-    static void CheckForEnemies(RobotController rc) throws GameActionException{
-        for(RobotInfo enemy : rc.senseNearbyRobots(RobotType.MINER.visionRadiusSquared, rc.getTeam().opponent()))
-            directSoldiers(rc, enemy.location, priorityMap.get(enemy.type));
+    static MapLocation[] GetAllSoldierDestinations(RobotController rc) throws GameActionException{
+        List<MapLocation> locations = new ArrayList<>();
+        for(int i = soldierIndexStart; i <= soldierIndexEnd; i++)
+            if(rc.readSharedArray(i) > 0) locations.add(GetSoldierDestination(rc, i));
+        return locations.toArray(new MapLocation[0]);
     }
 
-    static MapLocation soldiersDestination(RobotController rc) throws GameActionException{
-        if(soldiersDirected(rc) > 0) return readCoordinate(rc, 0);
-        else return null;
-    }
-
-    static int soldiersDirected(RobotController rc) throws GameActionException{
-        return rc.readSharedArray(1);
-    }
-
-    static boolean directSoldiers(RobotController rc, MapLocation location, int priority) throws GameActionException{
-        if(rc.readSharedArray(1) >= priority) return false;
-        else{
-            rc.writeSharedArray(1, priority);
-            writeCoordinate(rc, 0, location.x, location.y);
-            return true;
+    static void AddSoldierDestination(RobotController rc, MapLocation location) throws GameActionException{
+        RemoveSoldierDestination(rc, location);
+        for(int i = soldierIndexStart; i <= soldierIndexEnd; i++){
+            if(rc.readSharedArray(i) == 0){
+                rc.writeSharedArray(i, location.x + location.y * 60);
+                break;
+            }
         }
     }
 
-    static void cancelSoldierDirections(RobotController rc) throws GameActionException  {
-        rc.writeSharedArray(1, 0);
+    static void RemoveSoldierDestination(RobotController rc, MapLocation location) throws GameActionException{
+        for(int i = soldierIndexStart; i <= soldierIndexEnd; i++){
+            if(GetSoldierDestination(rc, i).equals(location)){
+                rc.writeSharedArray(i, 0);
+                return;
+            }
+        }
     }
 
-    static MapLocation readCoordinate(RobotController rc, int index) throws GameActionException {
-        int value = rc.readSharedArray(index) % 4096;
-        return(new MapLocation(value % 60, value / 60));
-    }
-
-    static void writeCoordinate(RobotController rc, int index, int xValue, int yValue) throws GameActionException {
-        int flag = rc.readSharedArray(index) / 4096;
-        rc.writeSharedArray(index, flag + (xValue + (yValue * 60)));
-    }
-
-    static boolean readFlag(RobotController rc, int index) throws GameActionException{
+    static MapLocation GetSoldierDestination(RobotController rc, int index) throws GameActionException{
         int value = rc.readSharedArray(index);
-        return(value / 4096 > 0);
-    }
-
-    static void writeFlag(RobotController rc, int index, boolean value) throws GameActionException{
-        int coordinate = rc.readSharedArray(index) % 4096;
-        rc.writeSharedArray(index, (value ? 1 : 0) * 4096 + coordinate);
+        return new MapLocation(value % 60, (value % 3600) / 60);
     }
 }
