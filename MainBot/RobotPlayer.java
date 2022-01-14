@@ -56,12 +56,14 @@ public strictfp class RobotPlayer {
     }
 
     static void runArchon(RobotController rc) throws GameActionException {
+        for(RobotInfo robot: rc.senseNearbyRobots(20, rc.getTeam().opponent()))
+            if(robot.type.equals(RobotType.SOLDIER)) AddSoldierDestination(rc, robot.getLocation());
         if(rc.readSharedArray(turnOrderIndex) > turnIndex) turnIndex = 0;
         else turnIndex = rc.readSharedArray(turnOrderIndex);
         rc.writeSharedArray(turnOrderIndex, turnIndex + 1);
         RobotType toBuild = null;
         if(false) {
-            if(minerCount > soldierCount * 3) toBuild = RobotType.SOLDIER;
+            if(minerCount > soldierCount * 2) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
         }
         else{
@@ -99,6 +101,8 @@ public strictfp class RobotPlayer {
 
     static void runMiner(RobotController rc) throws GameActionException {
         if(rc.senseNearbyRobots().length > maxMinersPerArea) explore(rc);
+        for(RobotInfo robot: rc.senseNearbyRobots(20, rc.getTeam().opponent()))
+            if(robot.type.equals(RobotType.SOLDIER)) AddSoldierDestination(rc, robot.getLocation());
         for(RobotInfo robot : rc.senseNearbyRobots()) if(robot.type == RobotType.SOLDIER && !robot.getTeam().isPlayer())
             if(rc.canMove(rc.getLocation().directionTo(robot.getLocation()).opposite()))
                 rc.move(rc.getLocation().directionTo(robot.getLocation()).opposite());
@@ -168,11 +172,16 @@ public strictfp class RobotPlayer {
         if (enemies.length > 0) {
             AddSoldierDestination(rc, enemies[0].location);
             for (RobotType type : attackPriority) {
+                int bestHealth = 10000;
+                RobotInfo bestEnemy = null;
                 for (RobotInfo enemy : enemies) {
                     if (enemy.type != type) continue;
-                    MapLocation toAttack = enemy.location;
-                    if (rc.canAttack(toAttack)) {
-                        rc.attack(toAttack);
+                    if(enemy.getHealth() < bestHealth){
+                        bestHealth = enemy.getHealth();
+                        bestEnemy = enemy;
+                    }
+                    if(bestEnemy != null && rc.canAttack(bestEnemy.getLocation())) {
+                        rc.attack(bestEnemy.getLocation());
                         exit = true;
                         break;
                     }
