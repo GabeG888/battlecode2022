@@ -24,6 +24,7 @@ public strictfp class RobotPlayer {
     static int turnOrderIndex = 0;
     static int soldierIndexStart = 1;
     static int soldierIndexEnd = 63;
+    static MapLocation startingLocation = null;
 
     @SuppressWarnings("unused")
     public static void run(RobotController rc) throws GameActionException {
@@ -35,6 +36,7 @@ public strictfp class RobotPlayer {
         priorityMap.put(RobotType.LABORATORY, 4);
         priorityMap.put(RobotType.ARCHON, 5);
         rng = new Random(rc.getID());
+        startingLocation = rc.getLocation();
         while (true) {
             try {
                 switch (rc.getType()) {
@@ -85,7 +87,6 @@ public strictfp class RobotPlayer {
                 && toBuild == RobotType.SOLDIER && rng.nextBoolean())
             toBuild = RobotType.BUILDER;
 
-        if(toBuild == null) return;
         for(Direction direction : Direction.values()) {
             if (rc.canBuildRobot(toBuild, direction)) {
                 rc.buildRobot(toBuild, direction);
@@ -96,6 +97,11 @@ public strictfp class RobotPlayer {
                 }
                 break;
             }
+        }
+
+        for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam())){
+            if(robot.type.equals(RobotType.SOLDIER) && robot.health < robot.type.getMaxHealth(1)
+                    && rc.canRepair(robot.getLocation())) rc.repair(robot.getLocation());
         }
     }
 
@@ -164,62 +170,81 @@ public strictfp class RobotPlayer {
     }
 
     static void runSoldier(RobotController rc) throws GameActionException {
-        boolean exit = false;
-        int radius = rc.getType().actionRadiusSquared;
-        Team opponent = rc.getTeam().opponent();
+        boolean archon = false;
+        for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam()))
+            if(robot.getType().equals(RobotType.ARCHON)){
+                archon = true;
+                break;
+            }
+        SoldierAttack(rc);
+        RobotInfo[] enemies = rc.senseNearbyRobots(rc.getType().actionRadiusSquared, rc.getTeam().opponent());
+        if (enemies.length > 0) MoveBestRubble(rc);
+        else if(rc.getHealth() < 15) MoveToArchon(rc);
+        else if(archon && rc.getHealth() < rc.getType().getMaxHealth(rc.getLevel())) return;
+        else if(GetAllSoldierDestinations(rc).length > 0) MoveToTarget(rc);
+        else explore(rc);
+    }
 
-        RobotInfo[] enemies = rc.senseNearbyRobots(radius, opponent);
-        if (enemies.length > 0) {
-            AddSoldierDestination(rc, enemies[0].location);
-            for (RobotType type : attackPriority) {
-                int bestHealth = 10000;
-                RobotInfo bestEnemy = null;
-                for (RobotInfo enemy : enemies) {
-                    if (enemy.type != type) continue;
-                    if(enemy.getHealth() < bestHealth){
-                        bestHealth = enemy.getHealth();
-                        bestEnemy = enemy;
-                    }
-                    if(bestEnemy != null && rc.canAttack(bestEnemy.getLocation())) {
-                        rc.attack(bestEnemy.getLocation());
-                        exit = true;
-                        break;
-                    }
-                }
-                if (exit) break;
-            }
-            RobotInfo closestEnemy = null;
-            int closestDistance = 10000;
-            for(RobotInfo enemy : enemies){
-                if(rc.getLocation().distanceSquaredTo(enemy.getLocation()) < closestDistance){
-                    closestDistance = rc.getLocation().distanceSquaredTo(enemy.getLocation());
-                    closestEnemy = enemy;
-                }
-            }
-            if(closestEnemy == null) return;
-            if(closestEnemy.type.equals(RobotType.SOLDIER)){
-                if(rc.getLocation().distanceSquaredTo(closestEnemy.getLocation()) > 13)
-                    navigateToLocation(rc, closestEnemy.getLocation());
-                else if(rc.getLocation().distanceSquaredTo(closestEnemy.getLocation()) < 13)
-                    navigateToLocation(rc, rc.getLocation().translate(rc.getLocation().x, rc.getLocation().y)
-                            .translate(-closestEnemy.location.x, -closestEnemy.location.y));
+    static void MoveToArchon(RobotController rc) throws GameActionException{
+        for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam()))
+            if(robot.type.equals(RobotType.ARCHON)) return;
+        navigateToLocation(rc, startingLocation);
+    }
+
+    static void MoveToTarget(RobotController rc) throws GameActionException{
+        MapLocation[] enemyLocations = GetAllSoldierDestinations(rc);
+        MapLocation closestEnemy = null;
+        int closestDistance = 10000;
+        for(MapLocation enemyLocation : enemyLocations){
+            if(rc.getLocation().distanceSquaredTo(enemyLocation) < closestDistance){
+                closestDistance = rc.getLocation().distanceSquaredTo(enemyLocation);
+                closestEnemy = enemyLocation;
             }
         }
-        else{
-            MapLocation[] enemyLocations = GetAllSoldierDestinations(rc);
-            MapLocation closestEnemy = null;
-            int closestDistance = 10000;
-            for(MapLocation enemyLocation : enemyLocations){
-                if(rc.getLocation().distanceSquaredTo(enemyLocation) < closestDistance){
-                    closestDistance = rc.getLocation().distanceSquaredTo(enemyLocation);
-                    closestEnemy = enemyLocation;
+        if(closestEnemy != null) {
+            if(closestEnemy.distanceSquaredTo(rc.getLocation()) < 10) RemoveSoldierDestination(rc, closestEnemy);
+            navigateToLocation(rc, closestEnemy);
+        }
+    }
+
+    static void MoveBestRubble(RobotController rc) throws GameActionException{
+        int bestRubble = 1000;
+        Direction bestDirection = null;
+        MapLocation start = rc.getLocation();
+        for(Direction direction : Direction.values()){
+            if(!rc.onTheMap(start.add(direction))) continue;
+            int rubble = rc.senseRubble(start.add(direction));
+            if(rubble < bestRubble){
+                bestRubble = rubble;
+                bestDirection = direction;
+            }
+        }
+        if(bestDirection != null && rc.canMove(bestDirection)) rc.move(bestDirection);
+    }
+
+    static void SoldierAttack(RobotController rc) throws GameActionException{
+        int radius = rc.getType().actionRadiusSquared;
+        Team opponent = rc.getTeam().opponent();
+        boolean exit = false;
+        RobotInfo[] enemies = rc.senseNearbyRobots(radius, opponent);
+        if(enemies.length < 1) return;
+        for (RobotType type : attackPriority) {
+            int bestHealth = 10000;
+            RobotInfo bestEnemy = null;
+            for (RobotInfo enemy : enemies) {
+                if (enemy.type != type) continue;
+                if(enemy.getHealth() < bestHealth){
+                    bestHealth = enemy.getHealth();
+                    bestEnemy = enemy;
+                }
+                if(bestEnemy != null && rc.canAttack(bestEnemy.getLocation())) {
+                    rc.attack(bestEnemy.getLocation());
+                    AddSoldierDestination(rc, enemies[0].location);
+                    exit = true;
+                    break;
                 }
             }
-            if(closestEnemy != null) {
-                if(closestEnemy.distanceSquaredTo(rc.getLocation()) < 10) RemoveSoldierDestination(rc, closestEnemy);
-                navigateToLocation(rc, closestEnemy);
-            }
-            else explore(rc);
+            if (exit) break;
         }
     }
 
