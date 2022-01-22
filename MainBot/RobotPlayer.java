@@ -205,7 +205,7 @@ public strictfp class RobotPlayer {
         MapLocation location = rc.getLocation();
         if(rc.canEnvision(AnomalyType.CHARGE) && enemies.length > 3) rc.envision(AnomalyType.CHARGE);
         else AttackLowestHealth(rc);
-        if((rc.getHealth() < 15 || (allies.length < 5 && enemies.length > 0)) && !archon) MoveToArchon(rc);
+        if(((allies.length < 5 && enemies.length > 0)) && !archon) MoveToArchon(rc);
         if (enemies.length > 0) {
             RobotInfo closestEnemy = null;
             int closestDistance = 10000;
@@ -226,7 +226,6 @@ public strictfp class RobotPlayer {
                 }
             }
         }
-        else if(archon && rc.getHealth() < rc.getType().getMaxHealth(rc.getLevel()) * 2 / 3) return;
         else if(GetAllSoldierDestinations(rc).length > 0) MoveToTarget(rc);
         else explore(rc);
     }
