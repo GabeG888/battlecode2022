@@ -69,7 +69,7 @@ public strictfp class RobotPlayer {
             RobotType toBuild;
             if(builderCount < 1 && rc.getRoundNum() > 25 && turnIndex == 0) toBuild = RobotType.BUILDER;
             else if(GetAllSoldierDestinations(rc).length == 0) toBuild = RobotType.MINER;
-            else if(rc.getTeamGoldAmount(rc.getTeam()) > RobotType.SAGE.buildCostGold && sageCount * 5 < soldierCount)
+            else if(rc.getTeamGoldAmount(rc.getTeam()) > RobotType.SAGE.buildCostGold && sageCount * 2 < soldierCount)
                 toBuild = RobotType.SAGE;
             else if(rc.getTeamLeadAmount(rc.getTeam()) > 2000 && builderCount < 10) toBuild = RobotType.BUILDER;
             else if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
