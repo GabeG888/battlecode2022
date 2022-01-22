@@ -21,7 +21,7 @@ public strictfp class RobotPlayer {
             RobotType.SOLDIER, RobotType.ARCHON, RobotType.LABORATORY, RobotType.MINER, RobotType.BUILDER};
     static HashMap<RobotType, Integer> priorityMap = new HashMap<>();
     static int turnOrderIndex = 0;
-    static int soldierIndexStart = 1;
+    static int soldierIndexStart = 2;
     static int soldierIndexEnd = 63;
     static MapLocation startingLocation = null;
     static RobotType[] attackingTypes;
@@ -64,43 +64,29 @@ public strictfp class RobotPlayer {
         if(rc.readSharedArray(turnOrderIndex) > turnIndex) turnIndex = 0;
         else turnIndex = rc.readSharedArray(turnOrderIndex);
         rc.writeSharedArray(turnOrderIndex, turnIndex + 1);
-        RobotType toBuild;
-        if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
-        else toBuild = RobotType.MINER;
-
-        if(builderCount < 1 && rc.getTeamLeadAmount(rc.getTeam()) > 250) toBuild = RobotType.BUILDER;
-
-        if(rc.getTeamGoldAmount(rc.getTeam()) > RobotType.SAGE.buildCostGold && sageCount * 5 < soldierCount)
-            toBuild = RobotType.SAGE;
-        if(rc.getTeamLeadAmount(rc.getTeam()) < 100 && rng.nextInt(rc.getArchonCount() - turnIndex) != 0) return;
-
-        RobotInfo[] robots = rc.senseNearbyRobots();
-        for(RobotInfo robot : robots){
-            if(robot.team != rc.getTeam()){
-                toBuild = RobotType.SOLDIER;
-                break;
-            }
-        }
-
-        if(rc.getTeamLeadAmount(rc.getTeam()) > 2000 && builderCount < 10
-                && toBuild == RobotType.SOLDIER && rng.nextBoolean())
-            toBuild = RobotType.BUILDER;
-
-        if(GetAllSoldierDestinations(rc).length == 0) toBuild = RobotType.MINER;
-
-        for(Direction direction : Direction.values()) {
-            if (rc.canBuildRobot(toBuild, direction)) {
-                rc.buildRobot(toBuild, direction);
-                switch (toBuild) {
-                    case MINER: minerCount++; break;
-                    case SOLDIER: soldierCount++; break;
-                    case BUILDER: builderCount++; break;
-                    case SAGE: sageCount++; break;
+        if((rc.getTeamLeadAmount(rc.getTeam()) > 100 || rng.nextInt(rc.getArchonCount() - turnIndex) == 0)
+                && rc.readSharedArray(1) != 1){
+            RobotType toBuild;
+            if(builderCount < 1 && rc.getRoundNum() > 25 && turnIndex == 0) toBuild = RobotType.BUILDER;
+            else if(GetAllSoldierDestinations(rc).length == 0) toBuild = RobotType.MINER;
+            else if(rc.getTeamGoldAmount(rc.getTeam()) > RobotType.SAGE.buildCostGold && sageCount * 5 < soldierCount)
+                toBuild = RobotType.SAGE;
+            else if(rc.getTeamLeadAmount(rc.getTeam()) > 2000 && builderCount < 10) toBuild = RobotType.BUILDER;
+            else if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
+            else toBuild = RobotType.MINER;
+            for(Direction direction : Direction.values()) {
+                if (rc.canBuildRobot(toBuild, direction)) {
+                    rc.buildRobot(toBuild, direction);
+                    switch (toBuild) {
+                        case MINER: minerCount++; break;
+                        case SOLDIER: soldierCount++; break;
+                        case BUILDER: builderCount++; break;
+                        case SAGE: sageCount++; break;
+                    }
+                    break;
                 }
-                break;
             }
         }
-
         for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam())){
             if(robot.type.equals(RobotType.SOLDIER) && robot.health < robot.type.getMaxHealth(1)
                     && rc.canRepair(robot.getLocation())) rc.repair(robot.getLocation());
@@ -118,8 +104,9 @@ public strictfp class RobotPlayer {
         else if(archon && rc.getHealth() < 10) StartLeadFarm(rc);
         if(rc.senseNearbyRobots().length > maxMinersPerArea) explore(rc);
         for(RobotInfo robot: rc.senseNearbyRobots(20, rc.getTeam().opponent())){
-            if(robot.type.equals(RobotType.SOLDIER)) AddSoldierDestination(rc, robot.getLocation());
-            if(rc.canMove(rc.getLocation().directionTo(robot.getLocation()).opposite()))
+            AddSoldierDestination(rc, robot.getLocation());
+            if(Arrays.asList(attackingTypes).contains(robot.type)
+                    && rc.canMove(rc.getLocation().directionTo(robot.getLocation()).opposite()))
                 rc.move(rc.getLocation().directionTo(robot.getLocation()).opposite());
         }
         MapLocation[] golds = rc.senseNearbyLocationsWithGold(RobotType.MINER.visionRadiusSquared);
@@ -172,7 +159,8 @@ public strictfp class RobotPlayer {
                     explore(rc);
                     for(Direction direction : Direction.values())
                         if(rc.canMineLead(rc.getLocation().add(direction))
-                                && rc.senseLead(rc.getLocation().add(direction)) > 1)
+                                && (rc.senseLead(rc.getLocation().add(direction)) > 1
+                                || (rc.senseLead(rc.getLocation().add(direction)) > 1) && archon))
                             rc.mineLead(rc.getLocation().add(direction));
                 }
             }
@@ -196,6 +184,8 @@ public strictfp class RobotPlayer {
     }
 
     static void runBuilder(RobotController rc) throws GameActionException{
+        if(laboratoryCount < 1) rc.writeSharedArray(1, 1);
+        else rc.writeSharedArray(1, 0);
         if(!RepairBuildings(rc)){
             if(laboratoryCount < 1) BuildLaboratories(rc);
             else if(rc.getTeamLeadAmount(rc.getTeam()) > 2000) BuildWatchtowers(rc);
