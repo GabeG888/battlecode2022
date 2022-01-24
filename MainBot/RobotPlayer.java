@@ -205,7 +205,6 @@ public strictfp class RobotPlayer {
         MapLocation location = rc.getLocation();
         if(rc.canEnvision(AnomalyType.CHARGE) && enemies.length > 3) rc.envision(AnomalyType.CHARGE);
         else AttackLowestHealth(rc);
-        if(((allies.length < 5 && enemies.length > 0)) && !archon) MoveToArchon(rc);
         if (enemies.length > 0) {
             RobotInfo closestEnemy = null;
             int closestDistance = 10000;
@@ -217,7 +216,7 @@ public strictfp class RobotPlayer {
                 }
             }
             if(closestEnemy != null){
-                if(closestDistance > closestEnemy.type.actionRadiusSquared){
+                if(closestDistance > rc.getType().actionRadiusSquared){
                     navigateToLocation(rc, enemies[0].location);
                 }
                 else{
