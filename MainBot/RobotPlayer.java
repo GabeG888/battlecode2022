@@ -21,7 +21,7 @@ public strictfp class RobotPlayer {
             RobotType.SOLDIER, RobotType.ARCHON, RobotType.LABORATORY, RobotType.MINER, RobotType.BUILDER};
     static HashMap<RobotType, Integer> priorityMap = new HashMap<>();
     static int turnOrderIndex = 0;
-    static int soldierIndexStart = 2;
+    static int soldierIndexStart = 3;
     static int soldierIndexEnd = 63;
     static MapLocation startingLocation = null;
     static RobotType[] attackingTypes;
@@ -59,26 +59,31 @@ public strictfp class RobotPlayer {
     }
 
     static void runArchon(RobotController rc) throws GameActionException {
+        rc.setIndicatorString(rc.readSharedArray(1) + " " + rc.readSharedArray(2));
         for(RobotInfo robot: rc.senseNearbyRobots(20, rc.getTeam().opponent()))
             if(robot.type.equals(RobotType.SOLDIER)) AddSoldierDestination(rc, robot.getLocation());
         if(rc.readSharedArray(turnOrderIndex) > turnIndex) turnIndex = 0;
         else turnIndex = rc.readSharedArray(turnOrderIndex);
         rc.writeSharedArray(turnOrderIndex, turnIndex + 1);
-        if((rc.getTeamLeadAmount(rc.getTeam()) > 100 || rng.nextInt(rc.getArchonCount() - turnIndex) == 0)
-                && rc.readSharedArray(1) != 1){
+        if((rc.getTeamLeadAmount(rc.getTeam()) > 100 || rng.nextInt(rc.getArchonCount() - turnIndex) == 0)){
             RobotType toBuild;
+            RobotInfo[] enemies = rc.senseNearbyRobots(20, rc.getTeam().opponent());
             if(builderCount < 1 && rc.getRoundNum() > 25 && turnIndex == 0) toBuild = RobotType.BUILDER;
+            else if(enemies.length > 0) toBuild = RobotType.SOLDIER;
+            else if(rc.getTeamGoldAmount(rc.getTeam()) > RobotType.SAGE.buildCostGold) toBuild = RobotType.SAGE;
+            else if(rc.readSharedArray(1) * 10 + 10 < rc.readSharedArray(2)) return;
             else if(GetAllSoldierDestinations(rc).length == 0) toBuild = RobotType.MINER;
-            else if(rc.getTeamGoldAmount(rc.getTeam()) > RobotType.SAGE.buildCostGold && sageCount * 2 < soldierCount)
-                toBuild = RobotType.SAGE;
             else if(rc.getTeamLeadAmount(rc.getTeam()) > 2000 && builderCount < 10) toBuild = RobotType.BUILDER;
-            else if(minerCount * 2 > soldierCount) toBuild = RobotType.SOLDIER;
             else toBuild = RobotType.MINER;
             for(Direction direction : Direction.values()) {
                 if (rc.canBuildRobot(toBuild, direction)) {
                     rc.buildRobot(toBuild, direction);
                     switch (toBuild) {
-                        case MINER: minerCount++; break;
+                        case MINER: {
+                            minerCount++;
+                            rc.writeSharedArray(2, rc.readSharedArray(2) + 1);
+                            break;
+                        }
                         case SOLDIER: soldierCount++; break;
                         case BUILDER: builderCount++; break;
                         case SAGE: sageCount++; break;
@@ -184,10 +189,8 @@ public strictfp class RobotPlayer {
     }
 
     static void runBuilder(RobotController rc) throws GameActionException{
-        if(laboratoryCount < 1) rc.writeSharedArray(1, 1);
-        else rc.writeSharedArray(1, 0);
         if(!RepairBuildings(rc)){
-            if(laboratoryCount < 1) BuildLaboratories(rc);
+            if(rc.readSharedArray(1) * 10 < rc.readSharedArray(2)) BuildLaboratories(rc);
             else if(rc.getTeamLeadAmount(rc.getTeam()) > 2000) BuildWatchtowers(rc);
             else StartLeadFarm(rc);
         }
@@ -265,42 +268,30 @@ public strictfp class RobotPlayer {
     }
 
     static void BuildLaboratories(RobotController rc) throws GameActionException{
-        MapLocation[] locations = rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20);
-        MapLocation bestPrototype = null;
+        int bestRubble = 10000;
         int bestDistance = 10000;
-        for(MapLocation location : locations){
-            RobotInfo robot = rc.senseRobotAtLocation(location);
-            if(robot != null && robot.mode == RobotMode.PROTOTYPE && rc.onTheMap(location)
-                    && rc.getLocation().distanceSquaredTo(robot.getLocation()) < bestDistance){
-                bestDistance = rc.getLocation().distanceSquaredTo(robot.getLocation());
-                bestPrototype = robot.getLocation();
+        MapLocation bestLocation = null;
+        for(MapLocation location : rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20)) {
+            if((rc.senseRubble(location) < bestRubble || (rc.senseRubble(location) <= bestRubble
+                    && rc.getLocation().distanceSquaredTo(location) < bestDistance))
+                    && !rc.isLocationOccupied(location)){
+                bestRubble = rc.senseRubble(location);
+                bestLocation = location;
+                bestDistance = rc.getLocation().distanceSquaredTo(location);
             }
         }
-        if(bestPrototype != null){
-            if(rc.canRepair(bestPrototype)) rc.repair(bestPrototype);
-            else navigateToLocation(rc, bestPrototype);
+        if(bestLocation == null) rc.disintegrate();
+        if(rc.getLocation().distanceSquaredTo(bestLocation) <= 2){
+            if(rc.canBuildRobot(RobotType.LABORATORY, rc.getLocation().directionTo(bestLocation))){
+                rc.buildRobot(RobotType.LABORATORY, rc.getLocation().directionTo(bestLocation));
+                rc.writeSharedArray(1, rc.readSharedArray(1) + 1);
+            }
         }
         else{
-            RobotInfo archon = null;
-            for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam()))
-                if(robot.type.equals(RobotType.ARCHON)) {
-                    archon = robot;
-                    break;
-                }
-            Direction direction = rc.getLocation().directionTo(
-                    new MapLocation(rc.getMapWidth() / 2, rc.getMapHeight() / 2)).opposite();
-            if(archon != null && rc.onTheMap(rc.getLocation().add(direction))
-                    && !rc.isLocationOccupied(rc.getLocation().add(direction)))
-                navigateToLocation(rc, rc.getLocation().add(direction).add(direction).add(direction));
-            else{
-                for(Direction direction1 : Direction.values()) if(rc.canBuildRobot(RobotType.LABORATORY, direction1)){
-                    rc.buildRobot(RobotType.LABORATORY, direction1);
-                    laboratoryCount++;
-                    break;
-                }
-            }
+            navigateToLocation(rc, bestLocation.subtract(rc.getLocation().directionTo(bestLocation)));
         }
     }
+
 
     static void BuildWatchtowers(RobotController rc) throws GameActionException{
         MapLocation[] locations = rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20);
