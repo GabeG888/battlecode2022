@@ -58,6 +58,9 @@ public strictfp class RobotPlayer {
         }
     }
 
+    //Archon code
+    //Builds units if possible, else heals units
+    //Uses comms to determine archon order and uses that to distribute units
     static void runArchon(RobotController rc) throws GameActionException {
         rc.setIndicatorString(rc.readSharedArray(1) + " " + rc.readSharedArray(2));
         for(RobotInfo robot: rc.senseNearbyRobots(20, rc.getTeam().opponent()))
@@ -71,7 +74,7 @@ public strictfp class RobotPlayer {
             if(builderCount < 1 && rc.getRoundNum() > 25 && turnIndex == 0) toBuild = RobotType.BUILDER;
             else if(enemies.length > 0) toBuild = RobotType.SOLDIER;
             else if(rc.getTeamGoldAmount(rc.getTeam()) > RobotType.SAGE.buildCostGold) toBuild = RobotType.SAGE;
-            else if(rc.readSharedArray(1) * 10 + 10 < rc.readSharedArray(2)) return;
+            else if(rc.readSharedArray(1) * 5 + 5 < rc.readSharedArray(2)) return;
             else if(GetAllSoldierDestinations(rc).length == 0) toBuild = RobotType.MINER;
             else if(rc.getTeamLeadAmount(rc.getTeam()) > 2000 && builderCount < 10) toBuild = RobotType.BUILDER;
             else toBuild = RobotType.MINER;
@@ -98,11 +101,24 @@ public strictfp class RobotPlayer {
         }
     }
 
+    //Miner code
+    //Goes to the archon and potentially sacrifices if at low health
+    //Tries to spread out if too many miners are nearby
+    //Reports and runs away from enemies
+    //Mines any gold
+    //Mines lead down to 1, unless near an enemy archon, when it mines to 0
+    //Explores if there is no lead nearby or if other miners are already mining the lead nearby
     static void runMiner(RobotController rc) throws GameActionException {
+        boolean enemyArchon = false;
         boolean archon = false;
         for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam()))
             if(robot.getType().equals(RobotType.ARCHON)){
                 archon = true;
+                break;
+            }
+        for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam().opponent()))
+            if(robot.getType().equals(RobotType.ARCHON)){
+                enemyArchon = true;
                 break;
             }
         if(rc.getHealth() < 10 && !archon) MoveToArchon(rc);
@@ -123,7 +139,7 @@ public strictfp class RobotPlayer {
             MapLocation[] possibleLeads = rc.senseNearbyLocationsWithLead(2);
             List<MapLocation> leads = new ArrayList<>();
             for (MapLocation possibleLead : possibleLeads)
-                if (rc.senseLead(possibleLead) > 1) {
+                if (rc.senseLead(possibleLead) > 1 || (enemyArchon && rc.senseLead(possibleLead) > 0)) {
                     boolean isTaken = false;
                     for(Direction direction : Direction.values()) {
                         if(possibleLead.add(direction).distanceSquaredTo(rc.getLocation()) > 20) continue;
@@ -138,14 +154,16 @@ public strictfp class RobotPlayer {
                     if(!isTaken) leads.add(possibleLead);
                 }
             if(!leads.isEmpty()) {
-                MapLocation lead = leads.get(0);
-                while (rc.canMineLead(lead) && rc.senseLead(lead) > 1) rc.mineLead(lead);
+                for(MapLocation lead : leads){
+                    if (enemyArchon) while (rc.canMineLead(lead)) rc.mineLead(lead);
+                    else while (rc.canMineLead(lead) && rc.senseLead(lead) > 1) rc.mineLead(lead);
+                }
             }
             else {
                 possibleLeads = rc.senseNearbyLocationsWithLead(RobotType.MINER.visionRadiusSquared);
                 leads = new ArrayList<>();
                 for (MapLocation possibleLead : possibleLeads)
-                    if (rc.senseLead(possibleLead) > 1) {
+                    if (rc.senseLead(possibleLead) > 1 || (enemyArchon && rc.senseLead(possibleLead) > 0)) {
                         boolean isTaken = false;
                         for(Direction direction : Direction.values()) {
                             if(possibleLead.add(direction).distanceSquaredTo(rc.getLocation()) > 20) continue;
@@ -165,13 +183,19 @@ public strictfp class RobotPlayer {
                     for(Direction direction : Direction.values())
                         if(rc.canMineLead(rc.getLocation().add(direction))
                                 && (rc.senseLead(rc.getLocation().add(direction)) > 1
-                                || (rc.senseLead(rc.getLocation().add(direction)) > 1) && archon))
+                                || (rc.senseLead(rc.getLocation().add(direction)) > 0 && enemyArchon)))
                             rc.mineLead(rc.getLocation().add(direction));
                 }
             }
         }
     }
 
+    //Soldier code
+    //Attacks
+    //Goes to the archon and potentially sacrifices if at low health
+    //Tries to be on the best rubble space if fighting
+    //Goes to the nearest shared array coordinate if there is one
+    //Else explores
     static void runSoldier(RobotController rc) throws GameActionException {
         boolean archon = false;
         for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam()))
@@ -188,23 +212,22 @@ public strictfp class RobotPlayer {
         else explore(rc);
     }
 
+    //Builder code
+    //Tries to repair buildings
+    //If there are many more miners than laboratories, builds a laboratory
+    //If there is over 2000 lead, builds watchtowers
     static void runBuilder(RobotController rc) throws GameActionException{
         if(!RepairBuildings(rc)){
-            if(rc.readSharedArray(1) * 10 < rc.readSharedArray(2)) BuildLaboratories(rc);
+            if(rc.readSharedArray(1) * 5 + 5 < rc.readSharedArray(2)) BuildLaboratories(rc);
             else if(rc.getTeamLeadAmount(rc.getTeam()) > 2000) BuildWatchtowers(rc);
-            else StartLeadFarm(rc);
         }
     }
 
+    //Sage code
+    //Attacks the best enemy
+    //tries to stay near max range from the closest enemy
     static void runSage(RobotController rc) throws GameActionException{
-        boolean archon = false;
-        for(RobotInfo robot : rc.senseNearbyRobots(RobotType.ARCHON.actionRadiusSquared, rc.getTeam()))
-            if(robot.getType().equals(RobotType.ARCHON)){
-                archon = true;
-                break;
-            }
         RobotInfo[] enemies = rc.senseNearbyRobots(rc.getType().actionRadiusSquared, rc.getTeam().opponent());
-        RobotInfo[] allies = rc.senseNearbyRobots(rc.getType().visionRadiusSquared, rc.getTeam());
         MapLocation location = rc.getLocation();
         if(rc.canEnvision(AnomalyType.CHARGE) && enemies.length > 3) rc.envision(AnomalyType.CHARGE);
         else AttackLowestHealth(rc);
@@ -232,10 +255,14 @@ public strictfp class RobotPlayer {
         else explore(rc);
     }
 
+    //Laboratory code
+    //Transmutates if gold amount is less than the cost of two sages
     static void runLaboratory(RobotController rc) throws GameActionException{
         if(rc.canTransmute() && rc.getTeamGoldAmount(rc.getTeam()) < RobotType.SAGE.buildCostGold * 2) rc.transmute();
     }
 
+    //Watchtower code
+    //Attacks enemies if nearby, else explores
     static void runWatchtower(RobotController rc) throws GameActionException{
         if(rc.getMode() == RobotMode.TURRET){
             RobotInfo[] enemies = rc.senseNearbyRobots(RobotType.WATCHTOWER.actionRadiusSquared, rc.getTeam().opponent());
@@ -258,15 +285,7 @@ public strictfp class RobotPlayer {
         }
     }
 
-    static void SacrificeArchon(RobotController rc) throws GameActionException{
-        for(Direction direction : Direction.values()){
-            if(rc.canBuildRobot(RobotType.MINER, direction)){
-                rc.buildRobot(RobotType.MINER, direction);
-                rc.disintegrate();
-            }
-        }
-    }
-
+    //Builds a laboratory at the location visible with the least rubble
     static void BuildLaboratories(RobotController rc) throws GameActionException{
         int bestRubble = 10000;
         int bestDistance = 10000;
@@ -292,7 +311,7 @@ public strictfp class RobotPlayer {
         }
     }
 
-
+    //Builds a watchtower at the nearest empty location
     static void BuildWatchtowers(RobotController rc) throws GameActionException{
         MapLocation[] locations = rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20);
         MapLocation bestLocation = null;
@@ -311,6 +330,8 @@ public strictfp class RobotPlayer {
             rc.buildRobot(RobotType.WATCHTOWER, rc.getLocation().directionTo(bestLocation));
     }
 
+    //Repairs nearby building if possible
+    //Returns true if it repaired a building
     static boolean RepairBuildings(RobotController rc) throws GameActionException{
         MapLocation[] locations = rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), 20);
         MapLocation bestPrototype = null;
@@ -331,6 +352,7 @@ public strictfp class RobotPlayer {
         return false;
     }
 
+    //Navigates to the nearest location with no lead and kills itself
     static void StartLeadFarm(RobotController rc) throws GameActionException{
         if(rc.senseLead(rc.getLocation()) == 0) rc.disintegrate();
         int bestDistance = 10000;
@@ -349,6 +371,8 @@ public strictfp class RobotPlayer {
         }
     }
 
+    //Attacks the enemy nearby with the least health
+    //In the case of a tie, it chooses the best type of enemy to attack
     static void AttackLowestHealth(RobotController rc) throws GameActionException{
         int radius = rc.getType().actionRadiusSquared;
         Team opponent = rc.getTeam().opponent();
@@ -375,6 +399,7 @@ public strictfp class RobotPlayer {
         }
     }
 
+    //Gets all locations from the shared array
     static MapLocation[] GetAllSoldierDestinations(RobotController rc) throws GameActionException{
         List<MapLocation> locations = new ArrayList<>();
         for(int i = soldierIndexStart; i <= soldierIndexEnd; i++)
@@ -382,6 +407,7 @@ public strictfp class RobotPlayer {
         return locations.toArray(new MapLocation[0]);
     }
 
+    //Add an enemy location to the shared array
     static void AddSoldierDestination(RobotController rc, MapLocation location) throws GameActionException{
         RemoveSoldierDestination(rc, location);
         for(int i = soldierIndexStart; i <= soldierIndexEnd; i++){
@@ -392,6 +418,7 @@ public strictfp class RobotPlayer {
         }
     }
 
+    //Remove a location from the shared array
     static void RemoveSoldierDestination(RobotController rc, MapLocation location) throws GameActionException{
         for(int i = soldierIndexStart; i <= soldierIndexEnd; i++){
             if(GetSoldierDestination(rc, i).equals(location)){
@@ -401,11 +428,13 @@ public strictfp class RobotPlayer {
         }
     }
 
+    //Gets a location from the shared array
     static MapLocation GetSoldierDestination(RobotController rc, int index) throws GameActionException{
         int value = rc.readSharedArray(index);
         return new MapLocation(value % 60, (value % 3600) / 60);
     }
 
+    //Move to the neighboring location with the least rubble
     static void MoveBestRubble(RobotController rc) throws GameActionException{
         int bestRubble = 1000;
         Direction bestDirection = null;
@@ -421,12 +450,15 @@ public strictfp class RobotPlayer {
         if(bestDirection != null && rc.canMove(bestDirection)) rc.move(bestDirection);
     }
 
+    //Move towards the archon that created it
     static void MoveToArchon(RobotController rc) throws GameActionException{
         for(RobotInfo robot : rc.senseNearbyRobots(20, rc.getTeam()))
             if(robot.type.equals(RobotType.ARCHON)) return;
         navigateToLocation(rc, startingLocation);
     }
 
+    //Navigates to the closest enemy in the shared array
+    //Removes locations from the shared array if nearby
     static void MoveToTarget(RobotController rc) throws GameActionException{
         MapLocation[] enemyLocations = GetAllSoldierDestinations(rc);
         MapLocation closestEnemy = null;
@@ -443,11 +475,16 @@ public strictfp class RobotPlayer {
         }
     }
 
+    //Chooses a random location and navigates to it
     static void explore(RobotController rc) throws GameActionException {
         if(target == null || target.equals(rc.getLocation())) target = new MapLocation(rng.nextInt(rc.getMapWidth()), rng.nextInt(rc.getMapHeight()));
         navigateToLocation(rc, target);
     }
 
+    //Navigates to a location
+    //Only considers locations that are closer to the destination
+    //Chooses the one with the best estimate of difficulty
+    //Estimate is equal to the rubble on the location plus average rubble nearby times distance to destination
     static void navigateToLocation(RobotController rc, MapLocation end) throws GameActionException {
         float averageRubble = 0;
         MapLocation[] locations = rc.getAllLocationsWithinRadiusSquared(rc.getLocation(), rc.getType().visionRadiusSquared);
